@@ -1,5 +1,6 @@
 # Check Version CSV
-# ./wsadmin.sh -lang jython -f check_versions_csv.py > inventory.csv
+# ./wsadmin.sh -lang jython -f /path/to/script/check_versions_csv.py > inventory.csv
+# ./wsadmin.sh -lang jython -f /path/to/script/check_versions_csv.py -user <username> -password <password>
 import sys
 
 def get_versions():
