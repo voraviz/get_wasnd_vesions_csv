@@ -1,41 +1,70 @@
 # Check Version CSV
 # ./wsadmin.sh -lang jython -f /path/to/script/check_versions_csv.py > inventory.csv
 # ./wsadmin.sh -lang jython -f /path/to/script/check_versions_csv.py -user <username> -password <password>
+# check_versions_final.py
+# check_versions_universal.py
 import sys
+import re
 
-def get_versions():
-    # Header for the CSV output
+def get_best_java_version(jvm_mbean):
+    """
+    Queries JVM properties and extracts version + patch for any Java version (8, 11, 17, 21+).
+    """
+    try:
+        # We query these three properties as they cover almost all IBM/Oracle/OpenJDK scenarios
+        rt_ver = AdminControl.invoke(jvm_mbean, 'getProperty', 'java.runtime.version')
+        std_ver = AdminControl.invoke(jvm_mbean, 'getProperty', 'java.version')
+        full_ver = AdminControl.invoke(jvm_mbean, 'getProperty', 'java.fullversion')
+        
+        combined = "|".join([rt_ver, std_ver, full_ver])
+        
+        # This regex looks for:
+        # 1. Standard old format (1.8.0_351)
+        # 2. Modern format (11.0.21 or 21.0.2+13)
+        # 3. IBM specific format (8.0.5.37)
+        # It captures the numbers and the common separators (dot, underscore, plus, dash)
+        match = re.search(r'([0-9]+(\.[0-9]+)+(_[0-9]+|[\+][0-9]+|-[a-zA-Z0-9]+)?)', combined)
+        
+        if match:
+            return match.group(1)
+        return std_ver.split()[0] # Fallback to first word of java.version
+    except:
+        return "Unknown"
+
+def get_inventory():
     print("Hostname,NodeName,Java Version,WAS Version")
 
-    # Get all running Server MBeans in the cell
-    servers = AdminControl.queryNames('type=Server,*').splitlines()
+    nodes = AdminConfig.list('Node').splitlines()
 
-    for server_mbean in servers:
-        try:
-            # Extract names from the live MBean
-            node_name = AdminControl.getAttribute(server_mbean, 'nodeName')
-            server_name = AdminControl.getAttribute(server_mbean, 'name')
-            
-            # 1. Get Host Name from AdminConfig for the specific node
-            node_id = AdminConfig.getid('/Node:' + node_name + '/')
-            host_name = AdminConfig.showAttribute(node_id, 'hostName')
-            
-            # 2. Get WebSphere Version
-            was_version = AdminControl.getAttribute(server_mbean, 'serverVersion')
-            
-            # 3. Get Java Version from the associated JVM MBean
-            jvm_mbean = AdminControl.queryNames('type=JVM,node=' + node_name + ',process=' + server_name + ',*')
-            if jvm_mbean:
-                java_version = AdminControl.invoke(jvm_mbean, 'getProperty', 'java.version')
-            else:
-                java_version = "Unknown"
+    for node in nodes:
+        node_name = AdminConfig.showAttribute(node, 'name')
+        host_name = AdminConfig.showAttribute(node, 'hostName')
 
-            # Print in CSV format
-            print("%s,%s,%s,%s" % (host_name, node_name, java_version, was_version))
-            
-        except Exception, e:
-            continue
+        # Locate a running server/nodeagent to query live MBeans
+        server_mbean = AdminControl.queryNames('type=Server,node=' + node_name + ',process=nodeagent,*')
+        if not server_mbean:
+            others = AdminControl.queryNames('type=Server,node=' + node_name + ',*').splitlines()
+            if others: server_mbean = others[0]
+
+        if server_mbean:
+            try:
+                # WebSphere Version (Clean)
+                raw_was = AdminControl.getAttribute(server_mbean, 'serverVersion')
+                was_match = re.search(r'([0-9]+(\.[0-9]+)+)', raw_was)
+                was_ver = was_match.group(1) if was_match else raw_was.split()[0]
+
+                # Java Version (Clean + Patch)
+                s_name = AdminControl.getAttribute(server_mbean, 'name')
+                jvm_mbean = AdminControl.queryNames('type=JVM,node=' + node_name + ',process=' + s_name + ',*')
+                
+                java_ver = get_best_java_version(jvm_mbean) if jvm_mbean else "N/A"
+
+                print("%s,%s,%s,%s" % (host_name, node_name, java_ver, was_ver))
+            except:
+                print("%s,%s,Error,Error" % (host_name, node_name))
+        else:
+            print("%s,%s,Node Agent Stopped,N/A" % (host_name, node_name))
 
 if __name__ == "__main__":
-    get_versions()
+    get_inventory()
 
