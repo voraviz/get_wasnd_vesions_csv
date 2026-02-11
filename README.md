@@ -15,4 +15,4 @@ Sample output
 ![](images/was_and_java_versions.png)
 
 Remarks:
-*Script can get version from online node only because it use MBeans to connect to each nodes and retrieve information*
+*Script get version from online node via Mbeans*
