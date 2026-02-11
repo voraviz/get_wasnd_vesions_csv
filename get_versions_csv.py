@@ -1,8 +1,7 @@
 # Check Version CSV
 # ./wsadmin.sh -lang jython -f /path/to/script/check_versions_csv.py > inventory.csv
 # ./wsadmin.sh -lang jython -f /path/to/script/check_versions_csv.py -user <username> -password <password>
-# check_versions_final.py
-# check_versions_universal.py
+# ./wsadmin.sh -lang jython -user wasadmin -password web1sphere -f /tmp/check_versions_csv.py > inventory.csv
 import sys
 import re
 
@@ -18,11 +17,7 @@ def get_best_java_version(jvm_mbean):
         
         combined = "|".join([rt_ver, std_ver, full_ver])
         
-        # This regex looks for:
-        # 1. Standard old format (1.8.0_351)
-        # 2. Modern format (11.0.21 or 21.0.2+13)
-        # 3. IBM specific format (8.0.5.37)
-        # It captures the numbers and the common separators (dot, underscore, plus, dash)
+        # This regex looks for: 1.8.<patch> / 11.y.z / 21.y.z / IBM format 8.x.y.z
         match = re.search(r'([0-9]+(\.[0-9]+)+(_[0-9]+|[\+][0-9]+|-[a-zA-Z0-9]+)?)', combined)
         
         if match:
